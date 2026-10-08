@@ -1,0 +1,53 @@
+name: Redirect to tadnorge.no
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-redirect
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout redirect repo (generator)
+        uses: actions/checkout@v4
+
+      - name: Checkout live site source
+        uses: actions/checkout@v4
+        with:
+          repository: OleBee/tesla-fsd-norge
+          ref: main
+          path: _src
+
+      - name: Generate redirect pages
+        run: bash scripts/generate-redirects.sh _src _site
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
