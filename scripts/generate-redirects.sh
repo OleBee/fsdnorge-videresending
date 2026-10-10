@@ -22,7 +22,12 @@ html_public_path() {
 write_redirect() {
   local dest_file="$1"
   local public_path="$2"
+  local mode="${3:-path}"
   local target="${TARGET_HOST}${public_path}"
+  local js_target="\"${TARGET_HOST}\" + path + location.search + location.hash"
+  if [[ "$mode" == fixed ]]; then
+    js_target="\"${target}\" + location.hash"
+  fi
   mkdir -p "$(dirname "$dest_file")"
   cat > "$dest_file" <<EOF
 <!DOCTYPE html>
@@ -36,7 +41,7 @@ write_redirect() {
 (function () {
   var path = location.pathname || "/";
   path = path.replace(/^\\/fsdnorge-videresending(?=\\/|\$)/, "") || "/";
-  location.replace("${TARGET_HOST}" + path + location.search + location.hash);
+  location.replace(${js_target});
 })();
 </script>
 </head>
@@ -50,10 +55,17 @@ EOF
 while IFS= read -r -d '' f; do
   rel="${f#"$SRC"/}"
   case "$rel" in
-    drafts/*) continue ;;
+    drafts/*|scripts/*|.github/*) continue ;;
   esac
   public="$(html_public_path "$rel")"
-  write_redirect "$OUT/$rel" "$public"
+  # Tynne redirect-sider på tadnorge.no (meta refresh til en annen sti):
+  # pek canonical og videresending rett på sluttmålet, så Google slipper to hopp.
+  refresh="$(grep -oiE '<meta http-equiv="refresh" content="[0-9]+; *url=[^"]+"' "$f" | head -n1 | sed -E 's/.*url=([^"]+)"/\1/' || true)"
+  if [[ -n "$refresh" && "$refresh" == /* ]]; then
+    write_redirect "$OUT/$rel" "$refresh" fixed
+  else
+    write_redirect "$OUT/$rel" "$public"
+  fi
 done < <(find "$SRC" -type f -name '*.html' -print0)
 
 while IFS= read -r -d '' f; do
